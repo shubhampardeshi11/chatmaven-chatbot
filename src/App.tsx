@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 // Interface for the API response
@@ -50,8 +50,26 @@ interface ChatMessagesApiResponse {
 
 // Chat messages will be loaded from API
 
+// Add prop types for LandingPage
+interface LandingPageProps {
+  appearance: ChatAppearance;
+  openChat: () => void;
+}
+
+// Add prop types for ChatPage
+interface ChatPageProps {
+  appearance: ChatAppearance;
+  messages: Array<{id: number, text: string, sender: string}>;
+  inputValue: string;
+  setInputValue: React.Dispatch<React.SetStateAction<string>>;
+  handleKeyPress: (e: React.KeyboardEvent) => void;
+  sendMessage: () => void;
+  goBack: () => void;
+  onNewChat: () => void;
+}
+
 // Move LandingPage outside App
-const LandingPage = ({ appearance, openChat }) => (
+const LandingPage = ({ appearance, openChat }: LandingPageProps) => (
   <div 
     className="min-h-screen flex flex-col"
     style={{ 
@@ -112,97 +130,136 @@ const LandingPage = ({ appearance, openChat }) => (
 
 // Move ChatPage outside App
 const ChatPage = ({
-  appearance, messages, inputValue, setInputValue, handleKeyPress, sendMessage, goBack
-}) => {
+  appearance, messages, inputValue, setInputValue, handleKeyPress, sendMessage, goBack, onNewChat
+}: ChatPageProps) => {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [dropdownOpen]);
+
   console.log('ChatPage rendered');
   return (
-    <div 
-      className="min-h-screen flex flex-col"
-      style={{ backgroundColor: appearance.chatWindowBackground }}
-    >
-      {/* Header with dynamic background color */}
-      <div 
-        className="text-white px-4 py-3 flex items-center justify-between"
-        style={{ backgroundColor: appearance.chatbotPrimaryBackground }}
-      >
-        <div className="flex items-center">
-          <button onClick={goBack} className="mr-3">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-lg font-semibold">{appearance.agentTitle}</h1>
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <div className="border rounded-2xl bg-white shadow-lg mx-auto my-8 max-w-5xl w-full min-h-[80vh] flex flex-col">
+        {/* Header with dynamic background color */}
+        <div 
+          className="text-white px-4 py-3 flex items-center justify-between rounded-t-2xl"
+          style={{ backgroundColor: appearance.chatbotPrimaryBackground }}
+        >
+          <div className="flex items-center">
+            <button onClick={goBack} className="mr-3">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <h1 className="text-lg font-semibold">{appearance.agentTitle}</h1>
+          </div>
+          {/* Dots menu */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((v) => !v)}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 focus:outline-none"
+              aria-label="Open menu"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="6" r="1.5" fill="currentColor" />
+                <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="12" cy="18" r="1.5" fill="currentColor" />
+              </svg>
+            </button>
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg z-10">
+                <button
+                  onClick={() => { setDropdownOpen(false); onNewChat(); }}
+                  className="flex items-center w-full px-4 py-2 text-gray-800 hover:bg-gray-100 rounded-lg"
+                >
+                  <svg className="w-5 h-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New chat
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <button>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zM12 13a1 1 0 110-2 1 1 0 010 2zM12 20a1 1 0 110-2 1 1 0 010 2z" />
-          </svg>
-        </button>
-      </div>
-      {/* Chat messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div className={`flex items-start max-w-xs lg:max-w-md ${message.sender === 'user' ? 'flex-row-reverse' : ''}`}>
-              {message.sender === 'bot' && (
-                <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-300 flex items-center justify-center mr-3 flex-shrink-0">
-                  {appearance.avatar ? (
-                    <img 
-                      src={`data:image/png;base64,${appearance.avatar}`}
-                      alt="Bot Avatar"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 4V6C15 7.1 14.1 8 13 8S11 7.1 11 6V4L5 7V9C5 10.1 5.9 11 7 11S9 10.1 9 9V8L11 9V11C11 12.1 11.9 13 13 13S15 12.1 15 11V9L17 8V9C17 10.1 17.9 11 19 11S21 10.1 21 9Z"/>
-                    </svg>
-                  )}
+        {/* Chat messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div className={`flex items-start max-w-xs lg:max-w-md ${message.sender === 'user' ? 'flex-row-reverse' : ''}`}>
+                {message.sender === 'bot' && (
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-300 flex items-center justify-center mr-3 flex-shrink-0">
+                    {appearance.avatar ? (
+                      <img 
+                        src={`data:image/png;base64,${appearance.avatar}`}
+                        alt="Bot Avatar"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 4V6C15 7.1 14.1 8 13 8S11 7.1 11 6V4L5 7V9C5 10.1 5.9 11 7 11S9 10.1 9 9V8L11 9V11C11 12.1 11.9 13 13 13S15 12.1 15 11V9L17 8V9C17 10.1 17.9 11 19 11S21 10.1 21 9Z"/>
+                      </svg>
+                    )}
+                  </div>
+                )}
+                <div
+                  className="px-4 py-2 rounded-2xl"
+                  style={{
+                    backgroundColor: message.sender === 'user' 
+                      ? appearance.userChatMessageBackground 
+                      : appearance.chatboatMessageBackground,
+                    color: message.sender === 'user' ? 'white' : '#374151'
+                  }}
+                >
+                  <p className="text-sm">{message.text}</p>
                 </div>
-              )}
-              <div
-                className="px-4 py-2 rounded-2xl"
-                style={{
-                  backgroundColor: message.sender === 'user' 
-                    ? appearance.userChatMessageBackground 
-                    : appearance.chatboatMessageBackground,
-                  color: message.sender === 'user' ? 'white' : '#374151'
-                }}
-              >
-                <p className="text-sm">{message.text}</p>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-      {/* Input area */}
-      <div className="border-t bg-white p-4">
-        <div className="flex items-center space-x-2">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={appearance.placeholder}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <button
-            onClick={sendMessage}
-            className="w-10 h-10 text-white rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
-            style={{ backgroundColor: appearance.sendMessageButton }}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-            </svg>
-          </button>
+          ))}
         </div>
-        {/* Powered by ChatMaven */}
-        <div className="text-center mt-3">
-          <p className="text-xs text-gray-400">
-            Powered by <span className="text-purple-500 font-medium">ChatMaven</span>
-          </p>
+        {/* Input area */}
+        <div className="border-t bg-white p-4 rounded-b-2xl">
+          <div className="flex items-center space-x-2">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={appearance.placeholder}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <button
+              onClick={sendMessage}
+              className="w-10 h-10 text-white rounded-full flex items-center justify-center hover:opacity-80 transition-colors"
+              style={{ backgroundColor: appearance.sendMessageButton }}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              </svg>
+            </button>
+          </div>
+          {/* Powered by ChatMaven */}
+          <div className="text-center mt-3">
+            <p className="text-xs text-gray-400">
+              Powered by <span className="text-purple-500 font-medium">ChatMaven</span>
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -382,6 +439,15 @@ function App() {
     }
   }
 
+  // Add handler for new chat
+  const handleNewChat = () => {
+    setCurrentView('chat');
+    setMessages([]);
+    setInputValue('');
+    setChatSessionID(null);
+    // The next message will start a new session
+  };
+
   // Show loading spinner while fetching data
   if (loading || !appearance) {
     return (
@@ -402,6 +468,7 @@ function App() {
         handleKeyPress={handleKeyPress}
         sendMessage={sendMessage}
         goBack={goBack}
+        onNewChat={handleNewChat}
       />;
 }
 
