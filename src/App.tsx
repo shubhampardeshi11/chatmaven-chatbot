@@ -197,6 +197,34 @@ const ChatPage = ({
         </div>
         {/* Chat messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Welcome message always on top */}
+          <div className="flex justify-start">
+            <div className="flex items-start max-w-xs lg:max-w-md">
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-300 flex items-center justify-center mr-3 flex-shrink-0">
+                {appearance.avatar ? (
+                  <img 
+                    src={`data:image/png;base64,${appearance.avatar}`}
+                    alt="Bot Avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 4V6C15 7.1 14.1 8 13 8S11 7.1 11 6V4L5 7V9C5 10.1 5.9 11 7 11S9 10.1 9 9V8L11 9V11C11 12.1 11.9 13 13 13S15 12.1 15 11V9L17 8V9C17 10.1 17.9 11 19 11S21 10.1 21 9Z"/>
+                  </svg>
+                )}
+              </div>
+              <div
+                className="px-4 py-2 rounded-2xl"
+                style={{
+                  backgroundColor: appearance.chatboatMessageBackground,
+                  color: '#374151'
+                }}
+              >
+                <p className="text-sm">{appearance.welcomeMessage}</p>
+              </div>
+            </div>
+          </div>
+          {/* Render chat messages below welcome message */}
           {messages.map((message) => (
             <div
               key={message.id}
@@ -243,6 +271,7 @@ const ChatPage = ({
               onKeyPress={handleKeyPress}
               placeholder={appearance.placeholder}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              autoFocus
             />
             <button
               onClick={sendMessage}
@@ -296,32 +325,8 @@ function App() {
           setAppearance(appearanceData.data.chatAppearance)
         }
 
-        // Fetch chat messages
-        const messagesResponse = await fetch('https://api2.chatmaven.ai/Chats/GetChatMessages?chatSessionID=449', {
-          method: 'GET',
-          headers: apiHeaders
-        })
-        const messagesData: ChatMessagesApiResponse = await messagesResponse.json()
-        
-        if (messagesData.success && messagesData.data) {
-          // Transform API messages to our message format
-          const transformedMessages = messagesData.data.map((msg, index) => ({
-            id: msg.messageID || index + 1,
-            text: msg.messageText.replace(/<[^>]*>/g, ''), // Remove HTML tags
-            sender: msg.senderType === 'Bot' ? 'bot' : 'user'
-          }))
-          setMessages(transformedMessages)
-        }
-
       } catch (error) {
-        console.error('Failed to fetch data:', error)
-        // Set fallback data if API fails
-        // const fallbackMessages = [
-        //   { id: 1, text: "Hello", sender: "user" },
-        //   { id: 2, text: "I am a Chatbot!", sender: "bot" },
-        //   { id: 3, text: "Hello again! How can I assist you today?", sender: "bot" }
-        // ]
-        // setMessages(fallbackMessages)
+        console.error('Failed to fetch appearance data:', error)
       } finally {
         setLoading(false)
       }
@@ -332,7 +337,8 @@ function App() {
 
   // Function to handle opening chat
   const openChat = () => {
-    setCurrentView('chat')
+    setMessages([]);
+    setCurrentView('chat');
   }
 
   // Function to go back to landing page
@@ -340,7 +346,7 @@ function App() {
     setCurrentView('landing')
   }
 
-  // Start a new chat session and insert the first bot message
+  // Start a new chat session (no need to insert welcome message)
   const startNewChatSession = async (userMessage: string) => {
     // 1. Create new chat session
     const sessionRes = await fetch('https://api2.chatmaven.ai/Chats/InsertChatSession', {
@@ -356,20 +362,7 @@ function App() {
     if (sessionData.success && sessionData.data) {
       const newSessionID = sessionData.data;
       setChatSessionID(newSessionID);
-      // 2. Insert the first bot message
-      const senderUID = `iy45ytVZo40Ii1dzT78EJDpv3_cs_${newSessionID}_enduser`;
-      await fetch('https://api2.chatmaven.ai/Chats/InsertMessage', {
-        method: 'POST',
-        headers: apiHeaders,
-        body: JSON.stringify({
-          chatSessionID: newSessionID,
-          senderType: 'Bot',
-          senderID: 0,
-          messageText: 'I am a Chatbot!',
-          SenderUID: senderUID
-        })
-      });
-      // 3. Fetch messages for the new session
+      // 2. Fetch messages for the new session
       await fetchMessages(newSessionID);
       return newSessionID;
     }
@@ -414,21 +407,46 @@ function App() {
   // Update sendMessage to handle new session logic
   const sendMessage = async () => {
     if (inputValue.trim()) {
+      const userMessage = inputValue;
+      // 1. Instantly add user message
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now(), text: userMessage, sender: 'user' },
+        { id: Date.now() + 1, text: 'Chatbot is replying…', sender: 'bot', loading: true }
+      ]);
+      setInputValue('');
       if (!chatSessionID) {
-        // Start new session and insert bot message
-        const newSessionID = await startNewChatSession(inputValue);
+        // Start new session
+        const newSessionID = await startNewChatSession(userMessage);
         if (newSessionID) {
-          // Insert the user's first message after session and bot message
-          await postMessage(inputValue, newSessionID);
-          setInputValue('');
-          await fetchMessages(newSessionID);
+          await postMessage(userMessage, newSessionID);
+          // Fetch messages and replace loading message
+          await fetchMessagesAndReplaceLoading(newSessionID);
         }
       } else {
-        // Existing session: just post message
-        await postMessage(inputValue, chatSessionID);
-        setInputValue('');
-        await fetchMessages();
+        // Existing session
+        await postMessage(userMessage, chatSessionID);
+        await fetchMessagesAndReplaceLoading();
       }
+    }
+  };
+
+  // Helper to fetch messages and replace loading message
+  const fetchMessagesAndReplaceLoading = async (sessionId?: number | null) => {
+    const id = sessionId ?? chatSessionID;
+    if (!id) return;
+    const messagesResponse = await fetch(`https://api2.chatmaven.ai/Chats/GetChatMessages?chatSessionID=${id}`, {
+      method: 'GET',
+      headers: apiHeaders
+    });
+    const messagesData: ChatMessagesApiResponse = await messagesResponse.json();
+    if (messagesData.success && messagesData.data) {
+      const transformedMessages = messagesData.data.map((msg, index) => ({
+        id: msg.messageID || index + 1,
+        text: msg.messageText.replace(/<[^>]*>/g, ''),
+        sender: msg.senderType === 'Bot' ? 'bot' : 'user'
+      }));
+      setMessages(transformedMessages);
     }
   };
 
