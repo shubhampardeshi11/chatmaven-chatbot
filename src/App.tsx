@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
+import React from 'react'
+import LeadForm from './components/LeadForm'
 
 // Interface for the API response
 interface ChatAppearance {
@@ -303,6 +305,7 @@ function App() {
   const [appearance, setAppearance] = useState<ChatAppearance | null>(null)
   const [loading, setLoading] = useState(true)
   const [chatSessionID, setChatSessionID] = useState<number | null>(null)
+  const [showLeadFormPopup, setShowLeadFormPopup] = useState(false);
 
   // Define common headers for all API requests
   const apiHeaders = {
@@ -310,7 +313,7 @@ function App() {
     'X-API-KEY-CC-BI': 'iy45ytVZo40Ii1dzT78EJDpv3'
   };
 
-  // Fetch appearance data and chat messages from API
+  // Fetch appearance data from API
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -334,6 +337,15 @@ function App() {
 
     fetchData()
   }, [])
+
+  // Automatically show LeadForm when chat page is opened
+  useEffect(() => {
+    if (currentView === 'chat') {
+      setShowLeadFormPopup(true);
+    } else {
+      setShowLeadFormPopup(false);
+    }
+  }, [currentView]);
 
   // Function to handle opening chat
   const openChat = () => {
@@ -476,18 +488,27 @@ function App() {
   }
 
   // Render current view
-  return currentView === 'landing'
-    ? <LandingPage appearance={appearance} openChat={openChat} />
-    : <ChatPage
-        appearance={appearance}
-        messages={messages}
-        inputValue={inputValue}
-        setInputValue={setInputValue}
-        handleKeyPress={handleKeyPress}
-        sendMessage={sendMessage}
-        goBack={goBack}
-        onNewChat={handleNewChat}
-      />;
+  return <>
+    {currentView === 'landing'
+      ? <LandingPage appearance={appearance} openChat={openChat} />
+      : <ChatPage
+          appearance={appearance}
+          messages={messages}
+          inputValue={inputValue}
+          setInputValue={setInputValue}
+          handleKeyPress={handleKeyPress}
+          sendMessage={sendMessage}
+          goBack={goBack}
+          onNewChat={handleNewChat}
+        />}
+    {showLeadFormPopup && currentView === 'chat' && 
+      <LeadForm 
+        chatSessionID={chatSessionID} 
+        botID="iy45ytVZo40Ii1dzT78EJDpv3" 
+        onClose={() => setShowLeadFormPopup(false)} 
+      />
+    }
+  </>;
 }
 
 export default App
